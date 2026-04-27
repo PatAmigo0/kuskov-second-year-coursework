@@ -1,4 +1,5 @@
-﻿using Accord.MachineLearning;
+﻿using Accord.IO;
+using Accord.MachineLearning;
 using Accord.Math.Distances;
 using SequenceClassificationModel.Core.Interface;
 using System;
@@ -9,9 +10,10 @@ namespace SequenceClassificationModel.Core.Models
 {
     public class AccordSequenceClassifier : IImageSequenceClassifier
     {
-        public string AlgorithmName => "Алгоритм из Accord.NET (k-NN)";
 
         private KNearestNeighbors _knn;
+        public KNearestNeighbors Model => _knn; 
+        public void SetModel(KNearestNeighbors knn) { _knn = knn; } 
 
         public void Train(List<double[][]> inputSequences, int[] labels)
         {
@@ -35,6 +37,17 @@ namespace SequenceClassificationModel.Core.Models
             return this._knn;
         }
 
+        public void Save(string path)
+        {
+            if (_knn == null) throw new InvalidOperationException("Модель не обучена!");
+            Serializer.Save(_knn, path);
+        }
+
+        public void Load(string path)
+        {
+            _knn = Serializer.Load<KNearestNeighbors>(path);
+        }
+
         private double[] FlattenSequence(double[][] sequence)
         {
             var result = new List<double>();
@@ -42,5 +55,7 @@ namespace SequenceClassificationModel.Core.Models
                 result.AddRange(frame);
             return result.ToArray();
         }
+
+
     }
 }

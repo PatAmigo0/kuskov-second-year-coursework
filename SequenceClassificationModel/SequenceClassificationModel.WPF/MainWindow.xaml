@@ -152,13 +152,26 @@
                         </Grid>
 
                         <TextBlock Text="Размер тестовой выборки" Foreground="#666" FontSize="10" Margin="0,0,0,5"/>
-                        <DockPanel Margin="0,0,0,25">
+                        <DockPanel Margin="0,0,0,15">
                             <TextBlock Text="{Binding TestSizePercentage, StringFormat={}{0}%}" DockPanel.Dock="Right" Width="35" TextAlignment="Right" Foreground="White" FontSize="11"/>
                             <Slider Minimum="10" Maximum="50" Value="{Binding TestSizePercentage}" IsSnapToTickEnabled="True" TickFrequency="5"/>
                         </DockPanel>
 
+                        <CheckBox Content="Провести тестирование после обучения" IsChecked="{Binding RunTesting}" 
+                                  Foreground="#AAA" FontSize="11" Margin="0,0,0,25" Cursor="Hand"/>
+
                         <Button Content="ОБУЧИТЬ СИСТЕМУ" Style="{StaticResource FlatButton}" 
                                 Command="{Binding TrainTestCommand}" Height="40" Background="#00A3FF" Foreground="Black" FontWeight="Bold"/>
+
+                        <Grid Margin="0,15,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="10"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="СОХРАНИТЬ" Style="{StaticResource FlatButton}" Command="{Binding SaveModelCommand}" FontSize="10"/>
+                            <Button Grid.Column="2" Content="ЗАГРУЗИТЬ" Style="{StaticResource FlatButton}" Command="{Binding LoadModelCommand}" FontSize="10"/>
+                        </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>

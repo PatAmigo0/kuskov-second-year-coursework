@@ -1,6 +1,8 @@
-﻿using System;
+﻿using SequenceClassificationModel.Core.Interface;
+using System;
 using System.Collections.Generic;
-using SequenceClassificationModel.Core.Interface;
+using System.Text.Json;
+using System.IO;
 
 namespace SequenceClassificationModel.Core.Models
 {
@@ -11,6 +13,9 @@ namespace SequenceClassificationModel.Core.Models
         private List<double[][]> _trainSequences;
         private int[] _trainLabels;
 
+        public List<double[][]> TrainSequences => _trainSequences;
+        public int[] TrainLabels => _trainLabels;
+
         public void Train(List<double[][]> inputSequences, int[] labels)
         {
             _trainSequences = inputSequences;
@@ -20,7 +25,7 @@ namespace SequenceClassificationModel.Core.Models
         public int Predict(double[][] sequence)
         {
             if (_trainSequences == null || _trainSequences.Count == 0)
-                throw new InvalidOperationException("Модель еще не обучена!");
+                throw new InvalidOperationException("Модель еще не обучена");
 
             double minDistance = double.MaxValue;
             int bestLabel = -1;
@@ -37,6 +42,29 @@ namespace SequenceClassificationModel.Core.Models
             }
 
             return bestLabel;
+        }
+
+        private class CustomModelData
+        {
+            public List<double[][]> Sequences { get; set; }
+            public int[] Labels { get; set; }
+        }
+
+        public void Save(string path)
+        {
+            if (_trainSequences == null || _trainLabels == null) throw new InvalidOperationException("Модель не обучена");
+
+            var data = new CustomModelData { Sequences = _trainSequences, Labels = _trainLabels };
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+                JsonSerializer.Serialize(stream, data);
+        }
+
+        public void Load(string path)
+        {
+            string json = File.ReadAllText(path);
+            var data = JsonSerializer.Deserialize<CustomModelData>(json);
+            _trainSequences = data.Sequences;
+            _trainLabels = data.Labels;
         }
 
         // DTW

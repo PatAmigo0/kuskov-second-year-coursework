@@ -20,6 +20,7 @@
 *_Backup
 *.avi
 *.mp4
+*.model
 Dataset_*/
 Raw_*/
 

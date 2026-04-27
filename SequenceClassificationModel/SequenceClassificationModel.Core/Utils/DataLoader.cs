@@ -1,46 +1,47 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SequenceClassificationModel.Core.Utils
 {
     public static class DataLoader
     {
-        public static (List<double[][]> Sequences, int[] Labels, List<string> ClassNames) LoadData(string rootFolderPath)
+        public static (List<double[][]> Sequences, int[] Labels) LoadData(string basePath)
         {
-            var sequences = new List<double[][]>();
-            var labels = new List<int>();
-            var classNames = new List<string>();
+            var sequences = new ConcurrentBag<double[][]>();
+            var labels = new ConcurrentBag<int>();
 
-            var classDirs = Directory.GetDirectories(rootFolderPath);
-            for (int classIndex = 0; classIndex < classDirs.Length; classIndex++)
+            var classDirs = Directory.GetDirectories(basePath);
+
+            Parallel.ForEach(classDirs, classDir =>
             {
-                string classDir = classDirs[classIndex];
-                classNames.Add(Path.GetFileName(classDir));
+                string dirName = new DirectoryInfo(classDir).Name;
+                if (!dirName.StartsWith("Class_")) return;
 
-                var sequenceDirs = Directory.GetDirectories(classDir);
-                foreach (var seqDir in sequenceDirs)
+                if (int.TryParse(dirName.Substring(6), out int label))
                 {
-                    var imageFiles = Directory.GetFiles(seqDir, "*.*")
-                                              .Where(f => f.EndsWith(".jpg") || f.EndsWith(".png") || f.EndsWith(".bmp"))
-                                              .OrderBy(f => f)
-                                              .ToArray();
+                    var seqDirs = Directory.GetDirectories(classDir);
 
-                    if (imageFiles.Length == 0) continue;
-
-                    var sequenceFrames = new List<double[]>();
-                    foreach (var imgPath in imageFiles)
+                    Parallel.ForEach(seqDirs, seqDir =>
                     {
-                        double[] features = ImagePreprocessor.ProcessImage(imgPath);
-                        sequenceFrames.Add(features);
-                    }
+                        var imageFiles = Directory.GetFiles(seqDir, "*.jpg").OrderBy(f => f).ToList();
 
-                    sequences.Add(sequenceFrames.ToArray());
-                    labels.Add(classIndex);
+                        if (imageFiles.Count > 0)
+                        {
+                            var seqFeatures = new double[imageFiles.Count][];
+                            for (int i = 0; i < imageFiles.Count; i++)
+                                seqFeatures[i] = ImagePreprocessor.ProcessImage(imageFiles[i]);
+
+                            sequences.Add(seqFeatures);
+                            labels.Add(label);
+                        }
+                    });
                 }
-            }
+            });
 
-            return (sequences, labels.ToArray(), classNames);
+            return (sequences.ToList(), labels.ToArray());
         }
     }
 }

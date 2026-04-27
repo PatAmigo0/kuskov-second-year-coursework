@@ -4,8 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using System.Windows.Forms; // Для FolderBrowserDialog
-using Microsoft.Win32; // НОВОЕ: Для OpenFileDialog (выбор одного файла)
+using System.Windows.Forms;
 using SequenceClassificationModel.Core.Interface;
 using SequenceClassificationModel.Core.Models;
 using SequenceClassificationModel.Core.Utils;
@@ -14,221 +13,229 @@ namespace SequenceClassificationModel.WPF.ViewModels
 {
     public class MainViewModel : ViewModelBase
     {
-        private string _statusText = "Программа готова к работе";
-        public string StatusText
-        {
-            get => _statusText;
-            set { _statusText = value; OnPropertyChanged(); }
-        }
+        private string _statusText = "Система готова к работе";
+        public string StatusText { get => _statusText; set { _statusText = value; OnPropertyChanged(); } }
 
         private string _selectedFolderPath = "Папка не выбрана";
-        public string SelectedFolderPath
-        {
-            get => _selectedFolderPath;
-            set { _selectedFolderPath = value; OnPropertyChanged(); }
-        }
+        public string SelectedFolderPath { get => _selectedFolderPath; set { _selectedFolderPath = value; OnPropertyChanged(); } }
 
         private int _testSizePercentage = 20;
-        public int TestSizePercentage
-        {
-            get => _testSizePercentage;
-            set { _testSizePercentage = value; OnPropertyChanged(); }
-        }
+        public int TestSizePercentage { get => _testSizePercentage; set { _testSizePercentage = value; OnPropertyChanged(); } }
 
-        public List<string> AvailableAlgorithms { get; }
-        private string _selectedAlgorithm;
-        public string SelectedAlgorithm
-        {
-            get { return _selectedAlgorithm; }
-            set { _selectedAlgorithm = value; OnPropertyChanged(); }
-        }
+        private bool _runTesting = true;
+        public bool RunTesting { get => _runTesting; set { _runTesting = value; OnPropertyChanged(); } }
 
-        public ICommand SelectFolderCommand { get; }
-        public ICommand TrainTestCommand { get; }
+        public List<AlgorithmType> AvailableAlgorithms { get; }
+        private AlgorithmType _selectedAlgorithm;
+        public AlgorithmType SelectedAlgorithm { get => _selectedAlgorithm; set { _selectedAlgorithm = value; OnPropertyChanged(); } }
 
-        // UI
         private bool _isBusy;
         public bool IsBusy
         {
-            get { return _isBusy; }
-            set
-            {
-                _isBusy = value;
-                OnPropertyChanged();
-                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
-            }
+            get => _isBusy;
+            set { _isBusy = value; OnPropertyChanged(); System.Windows.Input.CommandManager.InvalidateRequerySuggested(); }
         }
+
+        private bool _isModelTrained;
+        public bool IsModelTrained { get => _isModelTrained; set { _isModelTrained = value; OnPropertyChanged(); } }
 
         private IImageSequenceClassifier _trainedClassifier;
 
-        private bool _isModelTrained;
-        public bool IsModelTrained 
-        {
-            get { return _isModelTrained; }
-            set { _isModelTrained = value; OnPropertyChanged(); }
-        }
-
         private string _singleImagePath;
-        public string SingleImagePath
-        {
-            get { return _singleImagePath; }
-            set { _singleImagePath = value; OnPropertyChanged(); }
-        }
+        public string SingleImagePath { get => _singleImagePath; set { _singleImagePath = value; OnPropertyChanged(); } }
 
-        private string _singlePredictionResult = "Ожидание картинки...";
-        public string SinglePredictionResult
-        {
-            get { return _singlePredictionResult; }
-            set { _singlePredictionResult = value; OnPropertyChanged(); }
-        }
+        private string _singlePredictionResult = "Ожидание изображения...";
+        public string SinglePredictionResult { get => _singlePredictionResult; set { _singlePredictionResult = value; OnPropertyChanged(); } }
 
+        public ICommand SelectFolderCommand { get; }
+        public ICommand TrainTestCommand { get; }
         public ICommand SelectSingleImageCommand { get; }
         public ICommand PredictSingleCommand { get; }
+        public ICommand SaveModelCommand { get; }
+        public ICommand LoadModelCommand { get; }
 
         public MainViewModel()
         {
-            AvailableAlgorithms = new List<string> { "Мой алгоритм (Custom)", "Алгоритм из Accord.NET" };
+            AvailableAlgorithms = Enum.GetValues(typeof(AlgorithmType)).Cast<AlgorithmType>().ToList();
             SelectedAlgorithm = AvailableAlgorithms[0];
 
-            SelectFolderCommand = new RelayCommand(ExecuteSelectFolder);
+            SelectFolderCommand = new RelayCommand(ExecuteSelectFolder, _ => !IsBusy);
             TrainTestCommand = new RelayCommand(ExecuteTrainTest, CanExecuteTrainTest);
-            SelectSingleImageCommand = new RelayCommand(ExecuteSelectSingleImage);
+            SelectSingleImageCommand = new RelayCommand(ExecuteSelectSingleImage, _ => !IsBusy);
             PredictSingleCommand = new RelayCommand(ExecutePredictSingle, CanExecutePredictSingle);
+
+            SaveModelCommand = new RelayCommand(ExecuteSaveModel, _ => IsModelTrained && !IsBusy);
+            LoadModelCommand = new RelayCommand(ExecuteLoadModel, _ => !IsBusy);
         }
 
-        private void ExecuteSelectFolder(object parameter)
-        {
-            using (var dialog = new FolderBrowserDialog())
-            {
-                dialog.Description = "Выберите папку с обучающими изображениями";
-                if (dialog.ShowDialog() == DialogResult.OK)
-                {
-                    SelectedFolderPath = dialog.SelectedPath;
-                    StatusText = "Папка выбрана. Готов к обучению.";
-                }
-            }
-        }
-
-        private bool CanExecuteTrainTest(object parameter)
-        {
-            return SelectedFolderPath != "Папка не выбрана" && Directory.Exists(SelectedFolderPath) && !IsBusy;
-        }
+        private bool CanExecuteTrainTest(object p) => !string.IsNullOrEmpty(SelectedFolderPath) && Directory.Exists(SelectedFolderPath) && !IsBusy;
+        private bool CanExecutePredictSingle(object p) => IsModelTrained && !string.IsNullOrEmpty(SingleImagePath) && !IsBusy;
 
         private async void ExecuteTrainTest(object parameter)
         {
             IsBusy = true;
             IsModelTrained = false;
+            var progress = new Progress<string>(msg => StatusText = msg);
+            var reporter = (IProgress<string>)progress;
 
             try
             {
-                var progress = new Progress<string>(message => StatusText = message);
-                var progressReporter = (IProgress<string>)progress;
-
-                await Task.Run(() =>
-                {
-                    progressReporter.Report("Шаг 1/3: Загрузка данных с диска...");
-                    var data = DataLoader.LoadData(SelectedFolderPath);
-                    var sequences = data.Sequences;
-                    var labels = data.Labels;
-
-                    if (sequences.Count == 0) throw new Exception("В папке нет картинок!");
+                await Task.Run(() => {
+                    reporter.Report("Загрузка данных...");
+                    var (Sequences, Labels) = DataLoader.LoadData(SelectedFolderPath);
+                    if (Sequences.Count == 0) throw new Exception("Нет данных для обучения!");
 
                     Random rnd = new Random();
-                    var shuffledIndices = Enumerable.Range(0, sequences.Count).OrderBy(x => rnd.Next()).ToList();
-                    var shuffledSeqs = shuffledIndices.Select(i => sequences[i]).ToList();
-                    var shuffledLabels = shuffledIndices.Select(i => labels[i]).ToArray();
+                    var shuffledIndices = Enumerable.Range(0, Sequences.Count).OrderBy(x => rnd.Next()).ToList();
+                    var shuffledSeqs = shuffledIndices.Select(i => Sequences[i]).ToList();
+                    var shuffledLabels = shuffledIndices.Select(i => Labels[i]).ToArray();
 
                     double testRatio = TestSizePercentage / 100.0;
-                    int testSize = (int)(shuffledSeqs.Count * testRatio);
-                    int trainSize = shuffledSeqs.Count - testSize;
+                    int testCount = (int)(shuffledSeqs.Count * testRatio);
+                    int trainCount = shuffledSeqs.Count - testCount;
 
-                    var trainSeqs = shuffledSeqs.Take(trainSize).ToList();
-                    var trainLabels = shuffledLabels.Take(trainSize).ToArray();
-                    var testSeqs = shuffledSeqs.Skip(trainSize).ToList();
-                    var testLabels = shuffledLabels.Skip(trainSize).ToArray();
+                    var trainSeqs = shuffledSeqs.Take(trainCount).ToList();
+                    var trainLabels = shuffledLabels.Take(trainCount).ToArray();
+                    var testSeqs = shuffledSeqs.Skip(trainCount).ToList();
+                    var testLabels = shuffledLabels.Skip(trainCount).ToArray();
 
-                    progressReporter.Report($"Шаг 2/3: Обучение {SelectedAlgorithm} (может занять несколько минут)...");
+                    reporter.Report($"Обучение {SelectedAlgorithm}...");
 
-                    IImageSequenceClassifier classifier;
-                    if (SelectedAlgorithm == "Собственный алгоритм (DTW)")
-                        classifier = new CustomSequenceClassifier();
-                    else
-                        classifier = new AccordSequenceClassifier();
+                    IImageSequenceClassifier classifier = SelectedAlgorithm == AlgorithmType.DTW_1NN
+                        ? (IImageSequenceClassifier)new CustomSequenceClassifier()
+                        : new AccordSequenceClassifier();
 
                     classifier.Train(trainSeqs, trainLabels);
                     _trainedClassifier = classifier;
 
-                    int correctPredictions = 0;
-                    for (int i = 0; i < testSeqs.Count; i++)
+                    if (!RunTesting)
                     {
-                        if (i % 5 == 0)
-                            progressReporter.Report($"Шаг 3/3: Тестирование... Проверено {i} из {testSeqs.Count}");
-
-                        if (classifier.Predict(testSeqs[i]) == testLabels[i])
-                            correctPredictions++;
+                        reporter.Report($"Обучение завершено (тестирование пропущено)");
+                        return;
                     }
 
-                    double accuracy = (double)correctPredictions / testSeqs.Count * 100.0;
-                    progressReporter.Report($"Готово! Точность: {accuracy:F2}% (Угадано {correctPredictions} из {testSeqs.Count})");
-                });
+                    reporter.Report("Тестирование...");
 
+                    int correctPredictions = 0;
+                    int processedCount = 0;
+                    object lockObj = new object();
+
+                    Parallel.For(0, testSeqs.Count, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i =>
+                    {
+                        int predicted = classifier.Predict(testSeqs[i]);
+                        lock (lockObj)
+                        {
+                            if (predicted == testLabels[i]) correctPredictions++;
+                            processedCount++;
+
+                            if (processedCount % 10 == 0 || processedCount == testSeqs.Count)
+                                reporter.Report($"Тестирование: обработано {processedCount} из {testSeqs.Count}");
+                        }
+                    });
+
+                    double accuracy = (double)correctPredictions / testSeqs.Count * 100.0;
+                    reporter.Report($"Готово, точность: {accuracy:F2}% (угадано {correctPredictions} из {testSeqs.Count})");
+                });
                 IsModelTrained = true;
             }
-            catch (Exception ex)
-            {
-                StatusText = $"Ошибка: {ex.Message}";
-            }
-            finally
-            {
-                IsBusy = false;
-                System.Windows.Input.CommandManager.InvalidateRequerySuggested();
-            }
+            catch (Exception ex) { StatusText = $"Ошибка: {ex.Message}"; }
+            finally { IsBusy = false; }
         }
 
-        private void ExecuteSelectSingleImage(object parameter)
+        private async void ExecuteSaveModel(object p)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog
-            {
-                Filter = "Изображения|*.jpg;*.jpeg;*.png;*.bmp",
-                Title = "Выберите картинку для проверки"
-            };
-
+            var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "Model Files|*.model", Title = "Сохранить модель" };
             if (dialog.ShowDialog() == true)
             {
-                SingleImagePath = dialog.FileName;
-                SinglePredictionResult = "Картинка загружена. Нажмите 'Распознать'.";
+                IsBusy = true; 
+                StatusText = "Сохранение модели на диск...";
+
+                try
+                {
+                    string filePath = dialog.FileName;
+
+                    await Task.Run(() =>
+                    {
+                        _trainedClassifier.Save(filePath);
+                    });
+
+                    StatusText = "Модель успешно сохранена";
+                }
+                catch (Exception ex)
+                {
+                    StatusText = $"Ошибка сохранения: {ex.Message}";
+                }
+                finally
+                {
+                    IsBusy = false; 
+                }
             }
         }
 
-        private bool CanExecutePredictSingle(object parameter)
+        private async void ExecuteLoadModel(object p)
         {
-            return IsModelTrained && !string.IsNullOrEmpty(SingleImagePath) && !IsBusy;
+            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Model Files|*.model", Title = "Загрузить модель" };
+            if (dialog.ShowDialog() == true)
+            {
+                IsBusy = true;
+                StatusText = "Загрузка модели в память...";
+
+                try
+                {
+                    string filePath = dialog.FileName;
+                    AlgorithmType selectedAlg = SelectedAlgorithm;
+
+                    await Task.Run(() =>
+                    {
+                        IImageSequenceClassifier classifier = selectedAlg == AlgorithmType.DTW_1NN
+                            ? (IImageSequenceClassifier)new CustomSequenceClassifier()
+                            : new AccordSequenceClassifier();
+
+                        classifier.Load(filePath);
+                        _trainedClassifier = classifier;
+                    });
+
+                    IsModelTrained = true; 
+                    StatusText = $"Модель загружена";
+                }
+                catch (Exception ex)
+                {
+                    StatusText = $"Ошибка загрузки: совпадает ли выбранный алгоритм с файлом? ({ex.Message})";
+                    IsModelTrained = false;
+                }
+                finally
+                {
+                    IsBusy = false;
+                }
+            }
         }
 
-        private async void ExecutePredictSingle(object parameter)
+        private void ExecuteSelectFolder(object p)
+        {
+            using (var dialog = new FolderBrowserDialog())
+            {
+                if (dialog.ShowDialog() == DialogResult.OK) SelectedFolderPath = dialog.SelectedPath;
+            }
+        }
+
+        private void ExecuteSelectSingleImage(object p)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Images|*.jpg;*.png;*.bmp" };
+            if (dialog.ShowDialog() == true) SingleImagePath = dialog.FileName;
+        }
+
+        private async void ExecutePredictSingle(object p)
         {
             IsBusy = true;
-            SinglePredictionResult = "Анализирую...";
-
             try
             {
-                await Task.Run(() =>
-                {
-                    double[] features = ImagePreprocessor.ProcessImage(SingleImagePath);
-                    double[][] sequence = new double[][] { features };
-                    int predictedClass = _trainedClassifier.Predict(sequence);
-
-                    SinglePredictionResult = $"Модель считает, что это класс: {predictedClass}";
+                await Task.Run(() => {
+                    var features = ImagePreprocessor.ProcessImage(SingleImagePath);
+                    int res = _trainedClassifier.Predict(new double[][] { features });
+                    SinglePredictionResult = $"Класс: {res}";
                 });
             }
-            catch (Exception ex)
-            {
-                SinglePredictionResult = $"Ошибка распознавания: {ex.Message}";
-            }
-            finally
-            {
-                IsBusy = false;
-            }
+            finally { IsBusy = false; }
         }
     }
 }
