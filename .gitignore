@@ -21,6 +21,7 @@
 *.avi
 *.mp4
 Dataset_*/
+Raw_*/
 
 bin
 obj
