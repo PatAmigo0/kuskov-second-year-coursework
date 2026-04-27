@@ -6,7 +6,7 @@ using System.IO;
 
 namespace SequenceClassificationModel.Core.Models
 {
-    public class CustomSequenceClassifier : IImageSequenceClassifier
+    public class CustomSequenceClassifier : IImageSequenceClassifier, ISaveable
     {
         public string AlgorithmName => "Мой алгоритм (DTW + 1-NN)";
 
@@ -22,13 +22,14 @@ namespace SequenceClassificationModel.Core.Models
             _trainLabels = labels;
         }
 
-        public int Predict(double[][] sequence)
+        public int Predict(double[][] sequence, int k = 1)
         {
             if (_trainSequences == null || _trainSequences.Count == 0)
                 throw new InvalidOperationException("Модель еще не обучена");
 
             double minDistance = double.MaxValue;
             int bestLabel = -1;
+
 
             for (int i = 0; i < _trainSequences.Count; i++)
             {
@@ -59,7 +60,6 @@ namespace SequenceClassificationModel.Core.Models
             using (var writer = new BinaryWriter(fs))
             {
                 writer.Write(_trainSequences.Count);
-
                 foreach (var seq in _trainSequences)
                 {
                     writer.Write(seq.Length);

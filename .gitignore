@@ -23,6 +23,7 @@
 *.model
 Dataset_*/
 Raw_*/
+Raw/*
 
 bin
 obj

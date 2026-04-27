@@ -182,7 +182,7 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="АНАЛИЗ ПОСЛЕДОВАТЕЛЬНОСТИ (ВИДЕО)" FontSize="11" Foreground="{StaticResource AccentColor}" FontWeight="Bold" Margin="0,0,0,15"/>
+                <TextBlock Text="{Binding AnalyzeHeader}" FontSize="11" Foreground="{StaticResource AccentColor}" FontWeight="Bold" Margin="0,0,0,15"/>
 
                 <Border Grid.Row="1" Background="{StaticResource CardBg}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="30" IsEnabled="{Binding IsModelTrained}">
                     <Grid>

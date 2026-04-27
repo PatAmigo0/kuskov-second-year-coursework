@@ -6,8 +6,5 @@ namespace SequenceClassificationModel.Core.Interface
     {
         void Train(List<double[][]> sequences, int[] labels);
         int Predict(double[][] sequence);
-
-        void Save(string path);
-        void Load(string path);
     }
 }

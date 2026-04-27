@@ -109,6 +109,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Interface\ISaveable.cs" />
     <Compile Include="Models\AccordSequenceClassifier.cs" />
     <Compile Include="Interface\IImageSequenceClassifier.cs" />
     <Compile Include="Models\AlgorithmType.cs" />

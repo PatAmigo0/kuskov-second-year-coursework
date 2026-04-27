@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace SequenceClassificationModel.Core.Models
 {
-    public class AccordSequenceClassifier : IImageSequenceClassifier
+    public class AccordSequenceClassifier : IImageSequenceClassifier, ISaveable
     {
 
         private KNearestNeighbors _knn;
@@ -26,20 +26,15 @@ namespace SequenceClassificationModel.Core.Models
         public int Predict(double[][] sequence)
         {
             if (_knn == null)
-                throw new InvalidOperationException("Модель Accord.NET еще не обучена!");
+                throw new InvalidOperationException("Модель Accord.NET еще не обучена");
 
             double[] flattenedSeq = FlattenSequence(sequence);
             return this._knn.Decide(flattenedSeq);
         }
 
-        public KNearestNeighbors GetInternalModel()
-        {
-            return this._knn;
-        }
-
         public void Save(string path)
         {
-            if (_knn == null) throw new InvalidOperationException("Модель не обучена!");
+            if (_knn == null) throw new InvalidOperationException("Модель не обучена");
             Serializer.Save(_knn, path);
         }
 
@@ -55,7 +50,5 @@ namespace SequenceClassificationModel.Core.Models
                 result.AddRange(frame);
             return result.ToArray();
         }
-
-
     }
 }
