@@ -182,7 +182,7 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="АНАЛИЗ ИЗОБРАЖЕНИЯ" FontSize="11" Foreground="{StaticResource AccentColor}" FontWeight="Bold" Margin="0,0,0,15"/>
+                <TextBlock Text="АНАЛИЗ ПОСЛЕДОВАТЕЛЬНОСТИ (ВИДЕО)" FontSize="11" Foreground="{StaticResource AccentColor}" FontWeight="Bold" Margin="0,0,0,15"/>
 
                 <Border Grid.Row="1" Background="{StaticResource CardBg}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Padding="30" IsEnabled="{Binding IsModelTrained}">
                     <Grid>
@@ -192,10 +192,13 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <Button Content="ВЫБРАТЬ ФАЙЛ" Style="{StaticResource FlatButton}" Command="{Binding SelectSingleImageCommand}" HorizontalAlignment="Left" Margin="0,0,0,20"/>
+                        <Button Content="ВЫБРАТЬ ПАПКУ" Style="{StaticResource FlatButton}" Command="{Binding SelectSingleImageCommand}" HorizontalAlignment="Left" Margin="0,0,0,20"/>
 
                         <Border Grid.Row="1" Background="#050505" BorderBrush="#222" BorderThickness="1" MaxWidth="350" MaxHeight="250" VerticalAlignment="Top" HorizontalAlignment="Center">
-                            <Image Source="{Binding SingleImagePath}" Stretch="Uniform" Margin="5"/>
+                            <Grid>
+                                <TextBlock Text="Превью первого кадра" Foreground="#333" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10"/>
+                                <Image Source="{Binding PreviewImagePath}" Stretch="Uniform" Margin="5"/>
+                            </Grid>
                         </Border>
 
                         <StackPanel Grid.Row="2" Margin="0,20,0,0">
@@ -204,7 +207,7 @@
 
                             <Border Background="#0A0A0A" Padding="15" BorderBrush="#222" BorderThickness="1">
                                 <TextBlock Text="{Binding SinglePredictionResult}" 
-                                           Foreground="{StaticResource AccentColor}" FontSize="16"
+                                           Foreground="{StaticResource AccentColor}" FontSize="14"
                                            TextWrapping="Wrap" TextAlignment="Center"/>
                             </Border>
                         </StackPanel>

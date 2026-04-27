@@ -52,21 +52,62 @@ namespace SequenceClassificationModel.Core.Models
 
         public void Save(string path)
         {
-            if (_trainSequences == null || _trainLabels == null) throw new InvalidOperationException("Модель не обучена");
+            if (_trainSequences == null || _trainLabels == null)
+                throw new InvalidOperationException("Модель не обучена");
 
-            var data = new CustomModelData { Sequences = _trainSequences, Labels = _trainLabels };
-            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
-                JsonSerializer.Serialize(stream, data);
+            using (var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+            using (var writer = new BinaryWriter(fs))
+            {
+                writer.Write(_trainSequences.Count);
+
+                foreach (var seq in _trainSequences)
+                {
+                    writer.Write(seq.Length);
+                    foreach (var frame in seq)
+                    {
+                        writer.Write(frame.Length);
+                        foreach (var pixel in frame)
+                            writer.Write(pixel);
+                    }
+                }
+
+                writer.Write(_trainLabels.Length);
+                foreach (var label in _trainLabels)
+                    writer.Write(label);
+            }
         }
 
         public void Load(string path)
         {
-            string json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<CustomModelData>(json);
-            _trainSequences = data.Sequences;
-            _trainLabels = data.Labels;
-        }
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536))
+            using (var reader = new BinaryReader(fs))
+            {
+                int seqCount = reader.ReadInt32();
+                _trainSequences = new List<double[][]>(seqCount);
 
+                for (int i = 0; i < seqCount; i++)
+                {
+                    int frameCount = reader.ReadInt32();
+                    var seq = new double[frameCount][];
+
+                    for (int f = 0; f < frameCount; f++)
+                    {
+                        int pixelCount = reader.ReadInt32();
+                        var frame = new double[pixelCount];
+
+                        for (int p = 0; p < pixelCount; p++)
+                            frame[p] = reader.ReadDouble();
+                        seq[f] = frame;
+                    }
+                    _trainSequences.Add(seq);
+                }
+
+                int labelCount = reader.ReadInt32();
+                _trainLabels = new int[labelCount];
+                for (int i = 0; i < labelCount; i++)
+                    _trainLabels[i] = reader.ReadInt32();
+            }
+        }
         // DTW
         private double CalculateDTWDistance(double[][] seq1, double[][] seq2)
         {

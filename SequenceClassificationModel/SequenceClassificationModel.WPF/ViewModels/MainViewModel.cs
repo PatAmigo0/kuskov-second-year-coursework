@@ -9,7 +9,7 @@ using SequenceClassificationModel.Core.Interface;
 using SequenceClassificationModel.Core.Models;
 using SequenceClassificationModel.Core.Utils;
 
-namespace SequenceClassificationModel.WPF.ViewModels
+namespace SequenceClassificationModel.WPF.ViewModelsы
 {
     public class MainViewModel : ViewModelBase
     {
@@ -24,6 +24,8 @@ namespace SequenceClassificationModel.WPF.ViewModels
 
         private bool _runTesting = true;
         public bool RunTesting { get => _runTesting; set { _runTesting = value; OnPropertyChanged(); } }
+
+
 
         public List<AlgorithmType> AvailableAlgorithms { get; }
         private AlgorithmType _selectedAlgorithm;
@@ -41,10 +43,13 @@ namespace SequenceClassificationModel.WPF.ViewModels
 
         private IImageSequenceClassifier _trainedClassifier;
 
-        private string _singleImagePath;
-        public string SingleImagePath { get => _singleImagePath; set { _singleImagePath = value; OnPropertyChanged(); } }
+        private string _interactiveSequencePath;
+        public string InteractiveSequencePath { get => _interactiveSequencePath; set { _interactiveSequencePath = value; OnPropertyChanged(); } }
 
-        private string _singlePredictionResult = "Ожидание изображения...";
+        private string _previewImagePath;
+        public string PreviewImagePath { get => _previewImagePath; set { _previewImagePath = value; OnPropertyChanged(); } }
+
+        private string _singlePredictionResult = "Ожидание последовательности...";
         public string SinglePredictionResult { get => _singlePredictionResult; set { _singlePredictionResult = value; OnPropertyChanged(); } }
 
         public ICommand SelectFolderCommand { get; }
@@ -69,7 +74,7 @@ namespace SequenceClassificationModel.WPF.ViewModels
         }
 
         private bool CanExecuteTrainTest(object p) => !string.IsNullOrEmpty(SelectedFolderPath) && Directory.Exists(SelectedFolderPath) && !IsBusy;
-        private bool CanExecutePredictSingle(object p) => IsModelTrained && !string.IsNullOrEmpty(SingleImagePath) && !IsBusy;
+        private bool CanExecutePredictSingle(object p) => IsModelTrained && !string.IsNullOrEmpty(InteractiveSequencePath) && !IsBusy;
 
         private async void ExecuteTrainTest(object parameter)
         {
@@ -80,26 +85,31 @@ namespace SequenceClassificationModel.WPF.ViewModels
 
             try
             {
-                await Task.Run(() => {
-                    reporter.Report("Загрузка данных...");
-                    var (Sequences, Labels) = DataLoader.LoadData(SelectedFolderPath);
-                    if (Sequences.Count == 0) throw new Exception("Нет данных для обучения!");
+                await Task.Run(() =>
+                {
+                    reporter.Report("Загрузка и предобработка данных...");
+                    var data = DataLoader.LoadData(SelectedFolderPath);
+                    if (data.Sequences.Count == 0) throw new Exception("Данные не найдены :(");
 
+                    reporter.Report("Перемешивание выборки...");
                     Random rnd = new Random();
-                    var shuffledIndices = Enumerable.Range(0, Sequences.Count).OrderBy(x => rnd.Next()).ToList();
-                    var shuffledSeqs = shuffledIndices.Select(i => Sequences[i]).ToList();
-                    var shuffledLabels = shuffledIndices.Select(i => Labels[i]).ToArray();
+                    var indices = Enumerable.Range(0, data.Sequences.Count).ToList();
+                    var shuffledIndices = indices.OrderBy(x => rnd.Next()).ToList();
+
+                    var allSeqs = shuffledIndices.Select(i => data.Sequences[i]).ToList();
+                    var allLabels = shuffledIndices.Select(i => data.Labels[i]).ToArray();
 
                     double testRatio = TestSizePercentage / 100.0;
-                    int testCount = (int)(shuffledSeqs.Count * testRatio);
-                    int trainCount = shuffledSeqs.Count - testCount;
+                    int testCount = (int)(allSeqs.Count * testRatio);
+                    int trainCount = allSeqs.Count - testCount;
 
-                    var trainSeqs = shuffledSeqs.Take(trainCount).ToList();
-                    var trainLabels = shuffledLabels.Take(trainCount).ToArray();
-                    var testSeqs = shuffledSeqs.Skip(trainCount).ToList();
-                    var testLabels = shuffledLabels.Skip(trainCount).ToArray();
+                    var trainSeqs = allSeqs.Take(trainCount).ToList();
+                    var trainLabels = allLabels.Take(trainCount).ToArray();
 
-                    reporter.Report($"Обучение {SelectedAlgorithm}...");
+                    var testSeqs = allSeqs.Skip(trainCount).Take(testCount).ToList();
+                    var testLabels = allLabels.Skip(trainCount).Take(testCount).ToArray();
+
+                    reporter.Report($"Обучение на {trainCount} примерах...");
 
                     IImageSequenceClassifier classifier = SelectedAlgorithm == AlgorithmType.DTW_1NN
                         ? (IImageSequenceClassifier)new CustomSequenceClassifier()
@@ -108,33 +118,30 @@ namespace SequenceClassificationModel.WPF.ViewModels
                     classifier.Train(trainSeqs, trainLabels);
                     _trainedClassifier = classifier;
 
-                    if (!RunTesting)
+                    if (!RunTesting || testSeqs.Count == 0)
                     {
-                        reporter.Report($"Обучение завершено (тестирование пропущено)");
+                        reporter.Report("Обучение завершено, тестирование пропущено");
                         return;
                     }
 
-                    reporter.Report("Тестирование...");
-
-                    int correctPredictions = 0;
-                    int processedCount = 0;
+                    reporter.Report($"Тестирование на {testSeqs.Count} новых примерах...");
+                    int correct = 0;
+                    int processed = 0;
                     object lockObj = new object();
 
-                    Parallel.For(0, testSeqs.Count, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, i =>
+                    Parallel.For(0, testSeqs.Count, i =>
                     {
                         int predicted = classifier.Predict(testSeqs[i]);
                         lock (lockObj)
                         {
-                            if (predicted == testLabels[i]) correctPredictions++;
-                            processedCount++;
-
-                            if (processedCount % 10 == 0 || processedCount == testSeqs.Count)
-                                reporter.Report($"Тестирование: обработано {processedCount} из {testSeqs.Count}");
+                            if (predicted == testLabels[i]) correct++;
+                            processed++;
+                            if (processed % 10 == 0) reporter.Report($"Тест: {processed}/{testSeqs.Count}...");
                         }
                     });
 
-                    double accuracy = (double)correctPredictions / testSeqs.Count * 100.0;
-                    reporter.Report($"Готово, точность: {accuracy:F2}% (угадано {correctPredictions} из {testSeqs.Count})");
+                    double accuracy = (double)correct / testSeqs.Count * 100.0;
+                    reporter.Report($"Готово! Точность на НОВЫХ данных: {accuracy:F2}%");
                 });
                 IsModelTrained = true;
             }
@@ -155,9 +162,8 @@ namespace SequenceClassificationModel.WPF.ViewModels
                     string filePath = dialog.FileName;
 
                     await Task.Run(() =>
-                    {
-                        _trainedClassifier.Save(filePath);
-                    });
+                        _trainedClassifier.Save(filePath)
+                    );
 
                     StatusText = "Модель успешно сохранена";
                 }
@@ -220,21 +226,56 @@ namespace SequenceClassificationModel.WPF.ViewModels
 
         private void ExecuteSelectSingleImage(object p)
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Images|*.jpg;*.png;*.bmp" };
-            if (dialog.ShowDialog() == true) SingleImagePath = dialog.FileName;
+            using (var dialog = new FolderBrowserDialog())
+            {
+                dialog.Description = "Выберите папку с кадрами (например, Seq_0)";
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    InteractiveSequencePath = dialog.SelectedPath;
+
+                    var firstImage = Directory.GetFiles(InteractiveSequencePath, "*.jpg").OrderBy(f => f).FirstOrDefault();
+                    if (firstImage != null)
+                    {
+                        PreviewImagePath = firstImage;
+                        SinglePredictionResult = "Последовательность загружена, нажмите 'Распознать'";
+                    }
+                    else
+                    {
+                        PreviewImagePath = null;
+                        SinglePredictionResult = "В папке нет .jpg файлов";
+                    }
+                }
+            }
         }
 
         private async void ExecutePredictSingle(object p)
         {
             IsBusy = true;
+            SinglePredictionResult = "Анализирую последовательность...";
+
+            var imageProgress = new Progress<string>(path => PreviewImagePath = path);
+            var reporter = (IProgress<string>)imageProgress;
+
             try
             {
-                await Task.Run(() => {
-                    var features = ImagePreprocessor.ProcessImage(SingleImagePath);
-                    int res = _trainedClassifier.Predict(new double[][] { features });
-                    SinglePredictionResult = $"Класс: {res}";
+                await Task.Run(async () => 
+                {
+                    var imageFiles = Directory.GetFiles(InteractiveSequencePath, "*.jpg").OrderBy(f => f).ToList();
+                    if (imageFiles.Count == 0) throw new Exception("Нет кадров для анализа!");
+
+                    var sequence = new double[imageFiles.Count][];
+                    for (int i = 0; i < imageFiles.Count; i++)
+                    {
+                        reporter.Report(imageFiles[i]);
+                        sequence[i] = ImagePreprocessor.ProcessImage(imageFiles[i]);
+                        await Task.Delay(30);
+                    }
+
+                    int res = _trainedClassifier.Predict(sequence);
+                    SinglePredictionResult = $"Результат: Класс {res}. Анализ завершен!";
                 });
             }
+            catch (Exception ex) { SinglePredictionResult = $"Ошибка: {ex.Message}"; }
             finally { IsBusy = false; }
         }
     }
