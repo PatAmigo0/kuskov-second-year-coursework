@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SequenceClassificationModel.Core/SequenceClassificationModel.Core.csproj" Id="619a3261-8bbb-4fd0-8bab-a10a7bdbfd48" />
+  <Project Path="SequenceClassificationModel.WPF/SequenceClassificationModel.WPF.csproj" Id="e70f1f2d-ffd7-4480-8280-f33985cbfb8c" />
+</Solution>
